@@ -1,7 +1,7 @@
 // Production API URL will be injected via environment or detected
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? "http://127.0.0.1:8000"
-    : "https://bio-ai-daily-update-backend.onrender.com"; // We will set this up on Render
+    : "https://bio-ai-daily-update.onrender.com"; // Matches your Render URL
 
 document.getElementById('refreshBtn').addEventListener('click', async () => {
     const loader = document.getElementById('loader');
