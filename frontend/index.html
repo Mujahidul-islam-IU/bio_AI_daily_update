@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioAI Daily Insights</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>BioAI Daily Update</h1>
+            <p>Lateast Research & Innovations in AI & Bioinformatics</p>
+        </header>
+
+        <div class="topic-inputs" style="display: flex; gap: 1rem; margin-bottom: 2rem; justify-content: center;">
+            <input type="text" id="aiTopic" placeholder="AI/ML Topic (e.g. LLMs)"
+                style="padding: 0.75rem; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--card-bg); color: white; width: 250px;">
+            <input type="text" id="bioTopic" placeholder="Bio Topic (e.g. Single-cell)"
+                style="padding: 0.75rem; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--card-bg); color: white; width: 250px;">
+        </div>
+
+        <div class="controls">
+            <button id="refreshBtn">Conduct Targeted Research</button>
+            <button id="webSearchBtn" style="background: #10b981;">Synthesize Trends</button>
+            <div id="loader" class="loader"></div>
+        </div>
+
+        <section id="gap-analysis-section" style="margin-bottom: 3rem; display: none;">
+            <h2 class="section-title">🔍 Overarching Gap Analysis</h2>
+            <div id="gap-content" class="paper-card"
+                style="border-left: 5px solid var(--accent-gold); background: rgba(251, 191, 36, 0.05);">
+                <!-- Gap analysis will be injected here -->
+            </div>
+        </section>
+        <h2 class="section-title">🌐 Real-time Web Insights</h2>
+        <div id="web-research-content" class="paper-card" style="white-space: pre-wrap; line-height: 1.8;">
+            <!-- Web research results will be injected here -->
+        </div>
+        </section>
+
+        <div class="dashboard-sections">
+            <section id="ai-section">
+                <h2 class="section-title">🤖 AI & Machine Learning</h2>
+                <div id="ai-papers" class="paper-list">
+                    <!-- Cards will be injected here -->
+                </div>
+            </section>
+
+            <section id="bio-section">
+                <h2 class="section-title">🧬 Bioinformatics & Single-cell</h2>
+                <div id="bio-papers" class="paper-list">
+                    <!-- Cards will be injected here -->
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Chat Modal -->
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <div class="chat-header">
+                <h3 id="modalPaperTitle">Chat about Paper</h3>
+                <span class="close-modal" style="cursor: pointer; font-size: 1.5rem;">&times;</span>
+            </div>
+            <div id="chatMessages" class="chat-messages">
+                <div class="message ai">Hello! I've analyzed this paper. Ask me anything about it!</div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chatInput" placeholder="Ask a question...">
+                <button id="sendChatBtn" class="refresh-btn"
+                    style="padding: 0.75rem 1.5rem; margin-top: 0;">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
