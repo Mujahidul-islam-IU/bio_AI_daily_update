@@ -22,9 +22,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Key - Set this in your environment or a .env file
+# API Keys - Set these in your environment or a .env file
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "YOUR_GROQ_API_KEY_HERE")
-llm_service = LLMService(api_key=GROQ_API_KEY)
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY") # User provided key
+
+llm_service = LLMService(api_key=GROQ_API_KEY, tavily_key=TAVILY_API_KEY)
 fetcher = PaperFetcher()
 
 # In-memory storage

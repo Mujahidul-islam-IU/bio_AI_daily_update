@@ -4,9 +4,12 @@ from typing import List, Optional
 import json
 from schemas.models import Paper, PaperInsight
 
+from tavily import TavilyClient
+
 class LLMService:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, tavily_key: Optional[str] = None):
         self.client = Groq(api_key=api_key)
+        self.tavily = TavilyClient(api_key=tavily_key) if tavily_key else None
         self.model = "llama-3.3-70b-versatile"
 
     async def generate_insights(self, paper: Paper) -> PaperInsight:
@@ -97,23 +100,35 @@ class LLMService:
             return f"Gap analysis unavailable: {e}"
 
     async def search_web_innovation(self, query: str) -> str:
-        """Groq doesn't have native search, so we'll simulate a research summary for now."""
-        prompt = f"Based on your knowledge, summarize the latest innovations (last 24-48h) in {query}. Since you don't have live web access, focus on very recent trends in AI and Bioinformatics."
-        
+        """Use Tavily to get real-time research results from the web."""
+        if not self.tavily:
+            return "Tavily API key not configured. Please add TAVILY_API_KEY to environment."
+
         try:
+            # Search for the latest 24h innovation trends
+            search_result = self.tavily.search(
+                query=f"latest 24h innovation trends in {query}",
+                search_depth="advanced",
+                max_results=5
+            )
+            
+            # Use LLM to synthesize the search results into a clean summary
+            context = json.dumps(search_result['results'])
+            prompt = f"""
+            Based on these search results, provide a concise synthesis of the latest innovations in {query}:
+            {context}
+
+            Focus on specific breakthroughs, new papers, or technology releases from the last 24-48 hours.
+            """
+            
             chat_completion = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 model=self.model,
             )
             return chat_completion.choices[0].message.content
         except Exception as e:
-            print(f"Groq search simulation error: {e}")
-            return f"Error performing research: {e}"
+            print(f"Tavily search error: {e}")
+            return f"Error performing live research: {e}"
 
     async def analyze_figure(self, paper_title: str, image_path: str) -> str:
         # Multimodal analysis placeholder
