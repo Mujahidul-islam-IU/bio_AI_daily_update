@@ -1,16 +1,55 @@
 import os
 from groq import Groq
+from tavily import TavilyClient
+import google.generativeai as genai
 from typing import List, Optional
 import json
 from schemas.models import Paper, PaperInsight
 
-from tavily import TavilyClient
-
 class LLMService:
-    def __init__(self, api_key: str, tavily_key: Optional[str] = None):
+    def __init__(self, api_key: str, tavily_key: Optional[str] = None, gemini_key: Optional[str] = None):
         self.client = Groq(api_key=api_key)
         self.tavily = TavilyClient(api_key=tavily_key) if tavily_key else None
-        self.model = "llama-3.3-70b-versatile"
+        
+        # New: Gemini Fallback
+        self.gemini_key = gemini_key
+        if gemini_key:
+            genai.configure(api_key=gemini_key)
+            self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+        else:
+            self.gemini_model = None
+            
+        # Use a model with higher rate limits for better stability
+        self.model = "llama-3.1-8b-instant" 
+
+    async def _call_with_fallback(self, prompt: str, system_prompt: str = "You are a specialized AI assistant in Bioinformatics and AI research.", force_json: bool = False):
+        """Internal helper to call Groq with a Gemini fallback on 429/failure."""
+        try:
+            # Try Groq first
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
+            
+            kwargs = {
+                "messages": messages,
+                "model": self.model,
+            }
+            if force_json:
+                kwargs["response_format"] = {"type": "json_object"}
+                
+            chat_completion = self.client.chat.completions.create(**kwargs)
+            return chat_completion.choices[0].message.content
+        except Exception as groq_err:
+            print(f"Groq API Error: {groq_err}")
+            if self.gemini_model:
+                print("Falling back to Gemini...")
+                try:
+                    gemini_prompt = f"{system_prompt}\n\n{prompt}"
+                    response = self.gemini_model.generate_content(gemini_prompt)
+                    return response.text
+                except Exception as gemi_err:
+                    print(f"Gemini Fallback Error: {gemi_err}")
+                    raise gemi_err
+            else:
+                raise groq_err
 
     async def generate_insights(self, paper: Paper) -> PaperInsight:
         prompt = f"""
@@ -27,32 +66,28 @@ class LLMService:
         }}
         """
         try:
-            chat_completion = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a specialized AI assistant in Bioinformatics and AI research. Always respond in valid JSON."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                model=self.model,
-                response_format={"type": "json_object"}
+            content = await self._call_with_fallback(
+                prompt=prompt, 
+                system_prompt="You are a specialized AI assistant in Bioinformatics and AI research. Always respond in valid JSON.",
+                force_json=True
             )
-            data = json.loads(chat_completion.choices[0].message.content)
+            # JSON cleaning for Gemini responses which might include markdown blocks
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+                
+            data = json.loads(content)
             return PaperInsight(**data)
         except Exception as e:
             print(f"Error generating insights for {paper.title}: {e}")
             return PaperInsight(
-                summary="Insight generation failed. " + paper.abstract[:150] + "...",
+                summary="Insight generation failed (API Limit reached). " + paper.abstract[:150] + "...",
                 key_technologies=["Manual Review Required"],
                 research_gaps=["Check paper for details"]
             )
 
     async def answer_paper_question(self, paper_context: dict, question: str) -> str:
-        """Answer a specific question about a paper using its abstract and insights as context."""
         prompt = f"""
         CONTEXT:
         Paper Title: {paper_context['title']}
@@ -62,22 +97,14 @@ class LLMService:
         USER QUESTION:
         {question}
 
-        Provide a concise, expert answer based on the context provided. If the answer isn't in the context, use your general knowledge but specify it's based on general expertise.
+        Provide a concise, expert answer based on the context provided.
         """
         try:
-            chat_completion = self.client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You are a helpful research assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                model=self.model,
-            )
-            return chat_completion.choices[0].message.content
+            return await self._call_with_fallback(prompt, system_prompt="You are a helpful research assistant.")
         except Exception as e:
-            return f"Chat error: {e}"
+            return f"Chat error: {e}. (Both primary and fallback AI are currently limited)"
 
     async def perform_cross_paper_analysis(self, papers: List[Paper]) -> str:
-        """Analyze a collection of papers to find overarching research gaps."""
         paper_summaries = "\n".join([f"- {p.title}: {p.insights.summary if p.insights else p.abstract[:100]}" for p in papers])
         prompt = f"""
         You are looking at a collection of the latest research papers in AI and Bioinformatics:
@@ -87,51 +114,24 @@ class LLMService:
         1. What is the biggest technology gap across these works?
         2. Is there a common challenge they all face but haven't solved?
         3. Provide 3 specific 'Innovation Opportunities' for a researcher.
-        
-        Respond in a structured, professional tone.
         """
         try:
-            chat_completion = self.client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model=self.model,
-            )
-            return chat_completion.choices[0].message.content
+            return await self._call_with_fallback(prompt)
         except Exception as e:
-            return f"Gap analysis unavailable: {e}"
+            return f"Analysis unavailable: {e}"
 
     async def search_web_innovation(self, query: str) -> str:
-        """Use Tavily to get real-time research results from the web."""
         if not self.tavily:
-            return "Tavily API key not configured. Please add TAVILY_API_KEY to environment."
+            return "Tavily API key not configured."
 
         try:
-            # Search for the latest 24h innovation trends
-            search_result = self.tavily.search(
-                query=f"latest 24h innovation trends in {query}",
-                search_depth="advanced",
-                max_results=5
-            )
-            
-            # Use LLM to synthesize the search results into a clean summary
+            search_result = self.tavily.search(query=f"latest 24h innovation trends in {query}", search_depth="advanced", max_results=5)
             context = json.dumps(search_result['results'])
-            prompt = f"""
-            Based on these search results, provide a concise synthesis of the latest innovations in {query}:
-            {context}
-
-            Focus on specific breakthroughs, new papers, or technology releases from the last 24-48 hours.
-            """
-            
-            chat_completion = self.client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model=self.model,
-            )
-            return chat_completion.choices[0].message.content
+            prompt = f"Based on these results, summarize innovations in {query}:\n{context}"
+            return await self._call_with_fallback(prompt)
         except Exception as e:
-            print(f"Tavily search error: {e}")
-            return f"Error performing live research: {e}"
+            return f"Search error: {e}"
 
     async def analyze_figure(self, paper_title: str, image_path: str) -> str:
-        # Multimodal analysis placeholder
-        prompt = f"Analyze this figure from the paper '{paper_title}' and explain its significance in the context of AI or Bioinformatics."
-        # This would pass the image bytes to Gemini
-        return "Insight about the chart/figure would be generated here."
+        # Gemini can actually do this better if implemented correctly
+        return "Visual analysis feature is currently being integrated into the fallback brain."
