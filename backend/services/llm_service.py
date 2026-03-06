@@ -71,18 +71,23 @@ class LLMService:
                 system_prompt="You are a specialized AI assistant in Bioinformatics and AI research. Always respond in valid JSON.",
                 force_json=True
             )
-            # JSON cleaning for Gemini responses which might include markdown blocks
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
+            
+            # Robust JSON extraction
+            import re
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                content = json_match.group(0)
+            
+            # Remove potential common JSON errors from LLMs (like trailing commas)
+            content = re.sub(r',\s*\}', '}', content)
+            content = re.sub(r',\s*\]', ']', content)
                 
             data = json.loads(content)
             return PaperInsight(**data)
         except Exception as e:
-            print(f"Error generating insights for {paper.title}: {e}")
+            print(f"Error parsing insights for {paper.title}: {e}")
             return PaperInsight(
-                summary="Insight generation failed (API Limit reached). " + paper.abstract[:150] + "...",
+                summary=f"Insight generation failed. {paper.abstract[:150]}...",
                 key_technologies=["Manual Review Required"],
                 research_gaps=["Check paper for details"]
             )

@@ -11,6 +11,10 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 
     loader.style.display = 'block';
     refreshBtn.disabled = true;
+    // Clear stale state for better UX
+    document.getElementById('gap-content').innerHTML = 'Analyzing new findings...';
+    document.getElementById('ai-papers').innerHTML = '';
+    document.getElementById('bio-papers').innerHTML = '';
 
     try {
         const response = await fetch(`${API_URL}/updates/research?ai_topic=${encodeURIComponent(aiTopic)}&bio_topic=${encodeURIComponent(bioTopic)}`, { method: 'POST' });
@@ -57,6 +61,7 @@ document.getElementById('webSearchBtn').addEventListener('click', async () => {
 
     loader.style.display = 'block';
     webSearchBtn.disabled = true;
+    webContent.innerHTML = 'Searching the live web with Tavily...';
 
     try {
         const response = await fetch(`${API_URL}/research/web?query=${encodeURIComponent(aiTopic)}`);

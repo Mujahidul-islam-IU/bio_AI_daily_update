@@ -34,3 +34,34 @@ class PaperRecord(Base):
     update = relationship("UpdateRecord", back_populates="papers")
 
 Base.metadata.create_all(bind=engine)
+
+# Auto-migration for existing databases
+def run_migrations():
+    """Ensure all required columns exist in the database."""
+    try:
+        # Use raw connection for DDL check
+        with engine.connect() as conn:
+            # Check papers table for source_id
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            columns = [c['name'] for c in inspector.get_columns('papers')]
+            if 'source_id' not in columns:
+                print("Adding source_id to papers table...")
+                conn.execute("ALTER TABLE papers ADD COLUMN source_id TEXT")
+            
+            # Check updates table for overall_gap_analysis
+            columns = [c['name'] for c in inspector.get_columns('updates')]
+            if 'overall_gap_analysis' not in columns:
+                print("Adding overall_gap_analysis to updates table...")
+                conn.execute("ALTER TABLE updates ADD COLUMN overall_gap_analysis TEXT")
+    except Exception as e:
+        print(f"Migration notice: {e}")
+
+run_migrations()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
