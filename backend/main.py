@@ -110,31 +110,31 @@ async def get_web_research(query: str = "AI and Bioinformatics innovations"):
 
 # ─── Research Trigger ─────────────────────────────────────
 
-@app.post("/updates/research")
-async def trigger_research(ai_topic: str = "AI and Machine Learning", bio_topic: str = "Single-cell cancer bioinformatics"):
-    global latest_update
-    
-    # AI/ML Search (arXiv)
-    ai_papers = fetcher.fetch_arxiv_papers(ai_topic, max_results=5)
-    
-    # Bioinformatics Search (PubMed with full abstracts)
-    bio_papers = fetcher.fetch_pubmed_papers(bio_topic, max_results=5)
-    
-    # bioRxiv Preprints
-    biorxiv_papers = fetcher.fetch_biorxiv_papers(bio_topic, max_results=3)
-    
-    # Generate insights for all papers
-    all_papers = ai_papers + bio_papers + biorxiv_papers
-    for paper in all_papers:
-        paper.insights = await llm_service.generate_insights(paper)
-    
-    # Cross-Paper Gap Analysis
-    overall_gap = await llm_service.perform_cross_paper_analysis(all_papers)
-
-    # Persist to DB
-    db = SessionLocal()
+@app.post("/updates/research", response_model=DailyUpdate)
+async def trigger_research(
+    ai_topic: str = Query(..., description="Query for AI papers"),
+    bio_topic: str = Query(..., description="Query for Bioinformatics papers"),
+    db: Session = Depends(get_db)
+):
     try:
-        new_update = UpdateRecord(date=datetime.now(), overall_gap_analysis=overall_gap)
+        fetcher = PaperFetcher()
+        # 1. Fetch from arXiv, PubMed, bioRxiv, and Semantic Scholar (Nature/Top Journals)
+        ai_papers = fetcher.fetch_arxiv_papers(ai_topic, max_results=3)
+        bio_papers = fetcher.fetch_pubmed_papers(bio_topic, max_results=3)
+        biorxiv_papers = fetcher.fetch_biorxiv_papers(bio_topic, max_results=2)
+        nature_papers = fetcher.fetch_springer_papers(bio_topic, max_results=2)
+        
+        all_papers = ai_papers + bio_papers + biorxiv_papers + nature_papers
+    
+        # Generate insights for all papers
+        for paper in all_papers:
+            paper.insights = await llm_service.generate_insights(paper)
+        
+        # Cross-Paper Gap Analysis
+        gap_analysis = await llm_service.perform_cross_paper_analysis(all_papers)
+
+        # Persist to DB
+        new_update = UpdateRecord(date=datetime.now(), overall_gap_analysis=gap_analysis)
         db.add(new_update)
         db.commit()
         db.refresh(new_update)
@@ -157,16 +157,18 @@ async def trigger_research(ai_topic: str = "AI and Machine Learning", bio_topic:
             db.commit()
             p.id = p_rec.id
         
-        latest_update = DailyUpdate(
-            date=new_update.date,
+        update_data = DailyUpdate(
+            date=datetime.now(),
             ai_papers=ai_papers,
             bio_papers=bio_papers,
             biorxiv_papers=biorxiv_papers,
-            overall_gap_analysis=overall_gap
+            nature_papers=nature_papers,
+            overall_gap_analysis=gap_analysis
         )
-        return {"message": "Research completed and saved", "id": new_update.id, "gap_analysis": overall_gap}
-    finally:
-        db.close()
+        return update_data
+    except Exception as e:
+        print(f"Research trigger error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to trigger research: {str(e)}")
 
 # ─── History ─────────────────────────────────────────────
 

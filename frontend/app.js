@@ -129,6 +129,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
     document.getElementById('ai-papers').innerHTML = '<div class="empty-state">Searching...</div>';
     document.getElementById('bio-papers').innerHTML = '<div class="empty-state">Searching...</div>';
     document.getElementById('biorxiv-papers').innerHTML = '<div class="empty-state">Searching...</div>';
+    document.getElementById('nature-papers').innerHTML = '<div class="empty-state">Searching...</div>';
 
     try {
         const response = await fetch(`${API_URL}/updates/research?ai_topic=${encodeURIComponent(aiTopic)}&bio_topic=${encodeURIComponent(bioTopic)}`, { method: 'POST' });
@@ -167,6 +168,7 @@ async function loadLatestUpdate() {
             renderPapers(data.ai_papers, 'ai-papers');
             renderPapers(data.bio_papers, 'bio-papers');
             renderPapers(data.biorxiv_papers || [], 'biorxiv-papers');
+            renderPapers(data.nature_papers || [], 'nature-papers');
 
             // Gap analysis
             const gapSection = document.getElementById('gap-analysis-section');
@@ -232,6 +234,7 @@ function renderPapers(papers, containerId) {
         let catClass = 'ai';
         if (paper.category === 'Bioinformatics') catClass = 'bio';
         if (paper.category === 'Preprint') catClass = 'preprint';
+        if (paper.category === 'Nature / Top Journals') catClass = 'nature';
 
         const authorsDisplay = paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ' et al.' : '');
         const dateStr = new Date(paper.published_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -310,9 +313,14 @@ async function loadBookmarks() {
             bookmarks.forEach(p => {
                 const card = document.createElement('div');
                 card.className = 'paper-card';
+                let catClass = 'ai';
+                if (p.category === 'Bioinformatics') catClass = 'bio';
+                if (p.category === 'Preprint') catClass = 'preprint';
+                if (p.category === 'Nature / Top Journals') catClass = 'nature';
+                
                 card.innerHTML = `
                     <div class="paper-card-top">
-                        <span class="paper-category ${p.category === 'Bioinformatics' ? 'bio' : p.category === 'Preprint' ? 'preprint' : 'ai'}">${p.category}</span>
+                        <span class="paper-category ${catClass}">${p.category}</span>
                         <button class="bookmark-btn" style="color: var(--accent-gold);" onclick="toggleBookmark(${p.id}, this)">★</button>
                     </div>
                     <h3>${p.title}</h3>
@@ -407,6 +415,7 @@ async function loadHistoryDetail(updateId) {
                 let catClass = 'ai';
                 if (p.category === 'Bioinformatics') catClass = 'bio';
                 if (p.category === 'Preprint') catClass = 'preprint';
+                if (p.category === 'Nature / Top Journals') catClass = 'nature';
                 
                 html += `
                     <div class="paper-card">

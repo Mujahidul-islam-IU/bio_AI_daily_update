@@ -26,4 +26,5 @@ class DailyUpdate(BaseModel):
     ai_papers: List[Paper]
     bio_papers: List[Paper]
     biorxiv_papers: List[Paper] = []
+    nature_papers: List[Paper] = []
     overall_gap_analysis: Optional[str] = None
