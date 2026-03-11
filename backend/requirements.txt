@@ -7,3 +7,4 @@ groq
 python-dateutil
 tavily-python
 google-generativeai
+python-dotenv
