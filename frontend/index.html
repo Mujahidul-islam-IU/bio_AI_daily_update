@@ -1,80 +1,179 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BioAI Daily Insights</title>
+    <title>BioAI Daily Insights — AI & Bioinformatics Research Dashboard</title>
+    <meta name="description" content="AI-powered research dashboard for tracking the latest innovations in Bioinformatics and Artificial Intelligence.">
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Marked.js for rendering markdown from LLM output -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
-    <div class="container">
-        <header>
-            <h1>BioAI Daily Update</h1>
-            <p>Latest Research & Innovations in AI & Bioinformatics</p>
+    <!-- Mobile Nav Overlay -->
+    <div id="mobileOverlay" class="mobile-overlay"></div>
+
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">🧬</span>
+                <span class="logo-text">BioAI</span>
+            </div>
+            <button id="closeSidebar" class="sidebar-close">&times;</button>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" class="nav-link active" data-section="dashboard"><span class="nav-icon">📊</span> Dashboard</a></li>
+            <li><a href="#" class="nav-link" data-section="history"><span class="nav-icon">📜</span> History</a></li>
+            <li><a href="#" class="nav-link" data-section="bookmarks"><span class="nav-icon">⭐</span> Bookmarks</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="theme-toggle" id="themeToggle">
+                <span class="theme-icon" id="themeIcon">🌙</span>
+                <span class="theme-label">Dark Mode</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <button id="menuToggle" class="menu-toggle">☰</button>
+            <div class="topbar-title">
+                <h1>BioAI Daily Update</h1>
+                <p class="topbar-subtitle">AI-Powered Research Intelligence</p>
+            </div>
+            <div class="topbar-actions">
+                <div id="statusIndicator" class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Ready</span>
+                </div>
+            </div>
         </header>
 
-        <div class="topic-inputs" style="display: flex; gap: 1rem; margin-bottom: 2rem; justify-content: center;">
-            <input type="text" id="aiTopic" placeholder="AI/ML Topic (e.g. LLMs)"
-                style="padding: 0.75rem; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--card-bg); color: white; width: 250px;">
-            <input type="text" id="bioTopic" placeholder="Bio Topic (e.g. Single-cell)"
-                style="padding: 0.75rem; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--card-bg); color: white; width: 250px;">
-        </div>
-
-        <div class="controls">
-            <button id="refreshBtn">Conduct Targeted Research</button>
-            <button id="webSearchBtn" style="background: #10b981;">Synthesize Trends</button>
-            <div id="loader" class="loader"></div>
-        </div>
-
-        <section id="gap-analysis-section" style="margin-bottom: 3rem; display: none;">
-            <h2 class="section-title">🔍 Overarching Gap Analysis</h2>
-            <div id="gap-content" class="paper-card"
-                style="border-left: 5px solid var(--accent-gold); background: rgba(251, 191, 36, 0.05);">
-                <!-- Gap analysis will be injected here -->
+        <!-- ===== DASHBOARD SECTION ===== -->
+        <div id="section-dashboard" class="content-section active">
+            <!-- Search Controls -->
+            <div class="search-panel">
+                <div class="search-panel-header">
+                    <h2>🔬 Research Parameters</h2>
+                </div>
+                <div class="search-inputs">
+                    <div class="input-group">
+                        <label for="aiTopic">AI / ML Topic</label>
+                        <input type="text" id="aiTopic" placeholder="e.g. Transformers, Graph Neural Networks">
+                    </div>
+                    <div class="input-group">
+                        <label for="bioTopic">Bioinformatics Topic</label>
+                        <input type="text" id="bioTopic" placeholder="e.g. Single-cell RNA, Drug Discovery">
+                    </div>
+                </div>
+                <div class="search-actions">
+                    <button id="refreshBtn" class="btn btn-primary">
+                        <span class="btn-icon">🚀</span> Conduct Research
+                    </button>
+                    <button id="webSearchBtn" class="btn btn-success">
+                        <span class="btn-icon">🌐</span> Synthesize Trends
+                    </button>
+                </div>
+                <div id="loader" class="loader-container">
+                    <div class="loader-spinner"></div>
+                    <span class="loader-text">Analyzing research papers...</span>
+                </div>
             </div>
-        </section>
-        <h2 class="section-title">🌐 Real-time Web Insights</h2>
-        <div id="web-research-content" class="paper-card" style="white-space: pre-wrap; line-height: 1.8;">
-            <!-- Web research results will be injected here -->
-        </div>
-        </section>
 
-        <div class="dashboard-sections">
-            <section id="ai-section">
-                <h2 class="section-title">🤖 AI & Machine Learning</h2>
-                <div id="ai-papers" class="paper-list">
-                    <!-- Cards will be injected here -->
+            <!-- Gap Analysis -->
+            <section id="gap-analysis-section" class="card gap-card" style="display: none;">
+                <div class="card-header">
+                    <h2>🔍 Cross-Paper Gap Analysis</h2>
+                </div>
+                <div id="gap-content" class="card-body markdown-body"></div>
+            </section>
+
+            <!-- Web Insights -->
+            <section class="card web-insights-card">
+                <div class="card-header">
+                    <h2>🌐 Real-time Web Insights</h2>
+                </div>
+                <div id="web-research-content" class="card-body markdown-body">
+                    <p class="placeholder-text">Click "Synthesize Trends" to fetch the latest innovations.</p>
                 </div>
             </section>
 
-            <section id="bio-section">
-                <h2 class="section-title">🧬 Bioinformatics & Single-cell</h2>
-                <div id="bio-papers" class="paper-list">
-                    <!-- Cards will be injected here -->
-                </div>
-            </section>
+            <!-- Paper Sections Grid -->
+            <div class="papers-grid">
+                <section class="papers-column">
+                    <h2 class="section-heading"><span class="heading-icon">🤖</span> AI & Machine Learning</h2>
+                    <div id="ai-papers" class="paper-list">
+                        <div class="empty-state">Run a research query to discover papers.</div>
+                    </div>
+                </section>
+
+                <section class="papers-column">
+                    <h2 class="section-heading"><span class="heading-icon">🧬</span> Bioinformatics</h2>
+                    <div id="bio-papers" class="paper-list">
+                        <div class="empty-state">Run a research query to discover papers.</div>
+                    </div>
+                </section>
+
+                <section class="papers-column papers-column-full">
+                    <h2 class="section-heading"><span class="heading-icon">📄</span> bioRxiv Preprints</h2>
+                    <div id="biorxiv-papers" class="paper-list">
+                        <div class="empty-state">bioRxiv preprints will appear after research.</div>
+                    </div>
+                </section>
+            </div>
         </div>
-    </div>
+
+        <!-- ===== HISTORY SECTION ===== -->
+        <div id="section-history" class="content-section">
+            <div class="section-header">
+                <h2>📜 Research History</h2>
+                <p>Browse your past research sessions</p>
+            </div>
+            <div id="history-list" class="history-list">
+                <div class="empty-state">Loading history...</div>
+            </div>
+            <!-- History Detail View -->
+            <div id="history-detail" class="history-detail" style="display: none;">
+                <button id="backToHistory" class="btn btn-ghost">← Back to History</button>
+                <div id="history-detail-content"></div>
+            </div>
+        </div>
+
+        <!-- ===== BOOKMARKS SECTION ===== -->
+        <div id="section-bookmarks" class="content-section">
+            <div class="section-header">
+                <h2>⭐ Bookmarked Papers</h2>
+                <p>Your saved research papers</p>
+            </div>
+            <div id="bookmarks-list" class="paper-list">
+                <div class="empty-state">No bookmarks yet. Star papers you want to revisit.</div>
+            </div>
+        </div>
+    </main>
 
     <!-- Chat Modal -->
     <div id="chatModal" class="modal">
         <div class="modal-content">
             <div class="chat-header">
                 <h3 id="modalPaperTitle">Chat about Paper</h3>
-                <span class="close-modal" style="cursor: pointer; font-size: 1.5rem;">&times;</span>
+                <button class="close-modal" id="closeModalBtn">&times;</button>
             </div>
             <div id="chatMessages" class="chat-messages">
-                <div class="message ai">Hello! I've analyzed this paper. Ask me anything about it!</div>
+                <div class="message ai">Hi! I've analyzed this paper. What would you like to know?</div>
             </div>
             <div class="chat-input-container">
-                <input type="text" id="chatInput" placeholder="Ask a question...">
-                <button id="sendChatBtn" class="refresh-btn"
-                    style="padding: 0.75rem 1.5rem; margin-top: 0;">Send</button>
+                <input type="text" id="chatInput" placeholder="Ask a question about this paper...">
+                <button id="sendChatBtn" class="btn btn-primary btn-send">
+                    <span>Send</span>
+                </button>
             </div>
         </div>
     </div>

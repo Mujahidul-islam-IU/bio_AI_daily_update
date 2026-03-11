@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -30,8 +30,20 @@ class PaperRecord(Base):
     insight_summary = Column(Text)
     key_technologies = Column(String) # JSON string
     research_gaps = Column(String)    # JSON string
+    bookmarked = Column(Boolean, default=False)
     
     update = relationship("UpdateRecord", back_populates="papers")
+    chat_messages = relationship("ChatMessage", back_populates="paper")
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    paper_id = Column(Integer, ForeignKey("papers.id"))
+    role = Column(String)  # 'user' or 'ai'
+    content = Column(Text)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    paper = relationship("PaperRecord", back_populates="chat_messages")
 
 Base.metadata.create_all(bind=engine)
 
@@ -39,21 +51,25 @@ Base.metadata.create_all(bind=engine)
 def run_migrations():
     """Ensure all required columns exist in the database."""
     try:
-        # Use raw connection for DDL check
         with engine.connect() as conn:
-            # Check papers table for source_id
-            from sqlalchemy import inspect
+            from sqlalchemy import inspect, text
             inspector = inspect(engine)
-            columns = [c['name'] for c in inspector.get_columns('papers')]
-            if 'source_id' not in columns:
-                print("Adding source_id to papers table...")
-                conn.execute("ALTER TABLE papers ADD COLUMN source_id TEXT")
             
-            # Check updates table for overall_gap_analysis
-            columns = [c['name'] for c in inspector.get_columns('updates')]
-            if 'overall_gap_analysis' not in columns:
-                print("Adding overall_gap_analysis to updates table...")
-                conn.execute("ALTER TABLE updates ADD COLUMN overall_gap_analysis TEXT")
+            # Check papers table
+            if 'papers' in inspector.get_table_names():
+                columns = [c['name'] for c in inspector.get_columns('papers')]
+                if 'source_id' not in columns:
+                    conn.execute(text("ALTER TABLE papers ADD COLUMN source_id TEXT"))
+                if 'bookmarked' not in columns:
+                    conn.execute(text("ALTER TABLE papers ADD COLUMN bookmarked BOOLEAN DEFAULT 0"))
+                conn.commit()
+            
+            # Check updates table
+            if 'updates' in inspector.get_table_names():
+                columns = [c['name'] for c in inspector.get_columns('updates')]
+                if 'overall_gap_analysis' not in columns:
+                    conn.execute(text("ALTER TABLE updates ADD COLUMN overall_gap_analysis TEXT"))
+                conn.commit()
     except Exception as e:
         print(f"Migration notice: {e}")
 

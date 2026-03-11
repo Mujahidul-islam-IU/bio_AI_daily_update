@@ -7,8 +7,9 @@ from schemas.models import Paper
 class PaperFetcher:
     def __init__(self):
         self.arxiv_url = "http://export.arxiv.org/api/query"
-        self.pubmed_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-        self.pubmed_summary_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+        self.pubmed_search_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        self.pubmed_fetch_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+        self.biorxiv_url = "https://api.biorxiv.org/details/biorxiv"
 
     def fetch_arxiv_papers(self, query: str, max_results: int = 5) -> List[Paper]:
         params = {
@@ -55,15 +56,17 @@ class PaperFetcher:
             return []
 
     def fetch_pubmed_papers(self, query: str, max_results: int = 5) -> List[Paper]:
+        """Fetch PubMed papers using eFetch for full abstracts."""
         try:
-            params = {
+            # Step 1: Search for IDs
+            search_params = {
                 "db": "pubmed",
                 "term": query,
                 "retmode": "json",
                 "retmax": max_results,
                 "sort": "pub+date"
             }
-            response = requests.get(self.pubmed_url, params=params)
+            response = requests.get(self.pubmed_search_url, params=search_params)
             if response.status_code != 200:
                 return []
             
@@ -71,41 +74,155 @@ class PaperFetcher:
             if not id_list:
                 return []
 
-            summary_params = {
+            # Step 2: Use eFetch to get full records with abstracts (XML format)
+            fetch_params = {
                 "db": "pubmed",
                 "id": ",".join(id_list),
-                "retmode": "json"
+                "retmode": "xml",
+                "rettype": "abstract"
             }
-            res_summary = requests.get(self.pubmed_summary_url, summary_params)
-            if res_summary.status_code != 200:
+            fetch_response = requests.get(self.pubmed_fetch_url, params=fetch_params)
+            if fetch_response.status_code != 200:
                 return []
 
-            result = res_summary.json().get("result", {})
+            root = ET.fromstring(fetch_response.content)
             papers = []
-            for pid in id_list:
+            
+            for article in root.findall('.//PubmedArticle'):
                 try:
-                    item = result.get(pid)
-                    if not item: continue
+                    medline = article.find('.//MedlineCitation')
+                    article_data = medline.find('.//Article')
                     
-                    pubdate = item.get("pubdate", "")
+                    # Get PMID
+                    pmid = medline.find('PMID').text
+                    
+                    # Get title
+                    title_elem = article_data.find('ArticleTitle')
+                    title = title_elem.text if title_elem is not None and title_elem.text else "No Title"
+                    
+                    # Get full abstract
+                    abstract_elem = article_data.find('.//Abstract')
+                    if abstract_elem is not None:
+                        abstract_parts = []
+                        for text_elem in abstract_elem.findall('AbstractText'):
+                            label = text_elem.get('Label', '')
+                            text = text_elem.text or ''
+                            if label:
+                                abstract_parts.append(f"{label}: {text}")
+                            else:
+                                abstract_parts.append(text)
+                        abstract = " ".join(abstract_parts)
+                    else:
+                        abstract = "Abstract not available for this article."
+                    
+                    # Get authors
+                    authors = []
+                    author_list = article_data.find('.//AuthorList')
+                    if author_list is not None:
+                        for author in author_list.findall('Author'):
+                            last = author.find('LastName')
+                            fore = author.find('ForeName')
+                            if last is not None and fore is not None:
+                                authors.append(f"{fore.text} {last.text}")
+                            elif last is not None:
+                                authors.append(last.text)
+                    if not authors:
+                        authors = ["Unknown"]
+                    
+                    # Get publication date
+                    pub_date = article_data.find('.//PubDate')
                     try:
-                        pdate = datetime.strptime(pubdate, "%Y %b %d") if " " in pubdate else datetime.now()
+                        year = pub_date.find('Year').text if pub_date.find('Year') is not None else str(datetime.now().year)
+                        month = pub_date.find('Month').text if pub_date.find('Month') is not None else "Jan"
+                        day = pub_date.find('Day').text if pub_date.find('Day') is not None else "1"
+                        pdate = datetime.strptime(f"{year} {month} {day}", "%Y %b %d")
                     except:
-                        pdate = datetime.now()
-
+                        try:
+                            pdate = datetime.strptime(f"{year} {month} {day}", "%Y %m %d")
+                        except:
+                            pdate = datetime.now()
+                    
                     papers.append(Paper(
-                        source_id=pid,
-                        title=item.get("title", "No Title"),
-                        authors=[a.get("name") for a in item.get("authors", [])] if item.get("authors") else ["Unknown"],
+                        source_id=pmid,
+                        title=title,
+                        authors=authors,
                         published_date=pdate,
-                        abstract="Summary view restricted in API. Visit link for details.",
-                        url=f"https://pubmed.ncbi.nlm.nih.gov/{pid}/",
+                        abstract=abstract,
+                        url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
                         source="PubMed",
                         category="Bioinformatics"
                     ))
                 except Exception as e:
-                    print(f"Skipping PubMed entry {pid}: {e}")
+                    print(f"Skipping PubMed entry: {e}")
             return papers
         except Exception as e:
             print(f"PubMed fetch error: {e}")
+            return []
+
+    def fetch_biorxiv_papers(self, query: str, max_results: int = 5) -> List[Paper]:
+        """Fetch recent preprints from bioRxiv API."""
+        try:
+            # bioRxiv API uses date ranges: /details/biorxiv/{from}/{to}/{cursor}
+            today = datetime.now()
+            from_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+            to_date = today.strftime("%Y-%m-%d")
+            
+            url = f"{self.biorxiv_url}/{from_date}/{to_date}/0"
+            response = requests.get(url, timeout=15)
+            if response.status_code != 200:
+                return []
+            
+            data = response.json()
+            collection = data.get("collection", [])
+            
+            # Filter by query keywords (bioRxiv API doesn't support keyword search directly)
+            query_terms = query.lower().split()
+            filtered = []
+            for item in collection:
+                title_lower = item.get("title", "").lower()
+                abstract_lower = item.get("abstract", "").lower()
+                combined = title_lower + " " + abstract_lower
+                if any(term in combined for term in query_terms):
+                    filtered.append(item)
+                if len(filtered) >= max_results:
+                    break
+            
+            # If keyword filtering returns too few, take the most recent ones
+            if len(filtered) < max_results:
+                for item in collection:
+                    if item not in filtered:
+                        filtered.append(item)
+                    if len(filtered) >= max_results:
+                        break
+            
+            papers = []
+            for item in filtered[:max_results]:
+                try:
+                    doi = item.get("doi", "")
+                    pdate_str = item.get("date", "")
+                    try:
+                        pdate = datetime.strptime(pdate_str, "%Y-%m-%d")
+                    except:
+                        pdate = datetime.now()
+                    
+                    authors_str = item.get("authors", "Unknown")
+                    authors = [a.strip() for a in authors_str.split(";") if a.strip()][:5]
+                    if not authors:
+                        authors = ["Unknown"]
+                    
+                    papers.append(Paper(
+                        source_id=doi,
+                        title=item.get("title", "No Title"),
+                        authors=authors,
+                        published_date=pdate,
+                        abstract=item.get("abstract", "Abstract not available."),
+                        url=f"https://doi.org/{doi}" if doi else "#",
+                        source="bioRxiv",
+                        category="Preprint"
+                    ))
+                except Exception as e:
+                    print(f"Skipping bioRxiv entry: {e}")
+            return papers
+        except Exception as e:
+            print(f"bioRxiv fetch error: {e}")
             return []

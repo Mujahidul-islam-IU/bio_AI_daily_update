@@ -130,7 +130,7 @@ class LLMService:
             return "Tavily API key not configured."
 
         try:
-            search_result = self.tavily.search(query=f"latest 24h innovation trends in {query}", search_depth="advanced", max_results=5)
+            search_result = self.tavily.search(query=f"latest AI bioinformatics research innovation trends: {query}", search_depth="advanced", max_results=5)
             context = json.dumps(search_result['results'])
             prompt = f"Based on these results, summarize innovations in {query}:\n{context}"
             return await self._call_with_fallback(prompt)
