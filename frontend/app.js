@@ -239,9 +239,14 @@ function renderPapers(papers, containerId) {
         const authorsDisplay = paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ' et al.' : '');
         const dateStr = new Date(paper.published_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
+        let relScore = paper.relevance_score ? `${paper.relevance_score}% Match` : '';
+
         card.innerHTML = `
             <div class="paper-card-top">
-                <span class="paper-category ${catClass}">${paper.category || 'Research'}</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="paper-category ${catClass}">${paper.category || 'Research'}</span>
+                    ${relScore ? `<span class="relevancy-badge" style="font-size: 0.75rem; background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 600;">🎯 ${relScore}</span>` : ''}
+                </div>
                 <button class="bookmark-btn" onclick="toggleBookmark(${paper.id}, this)" title="Bookmark this paper">☆</button>
             </div>
             <h3>${paper.title}</h3>

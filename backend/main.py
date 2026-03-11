@@ -163,7 +163,8 @@ async def trigger_research(
                 category=p.category,
                 insight_summary=p.insights.summary if p.insights else "",
                 key_technologies=json.dumps(p.insights.key_technologies if p.insights else []),
-                research_gaps=json.dumps(p.insights.research_gaps if p.insights else [])
+                research_gaps=json.dumps(p.insights.research_gaps if p.insights else []),
+                relevance_score=p.relevance_score
             )
             db.add(p_rec)
             db.commit()
@@ -225,7 +226,8 @@ async def get_update_detail(update_id: int):
                 "insight_summary": p.insight_summary,
                 "key_technologies": json.loads(p.key_technologies) if p.key_technologies else [],
                 "research_gaps": json.loads(p.research_gaps) if p.research_gaps else [],
-                "bookmarked": p.bookmarked or False
+                "bookmarked": p.bookmarked or False,
+                "relevance_score": p.relevance_score or 0.0
             })
         
         return {

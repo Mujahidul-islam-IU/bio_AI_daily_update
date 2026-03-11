@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Text, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -31,6 +31,7 @@ class PaperRecord(Base):
     key_technologies = Column(String) # JSON string
     research_gaps = Column(String)    # JSON string
     bookmarked = Column(Boolean, default=False)
+    relevance_score = Column(Float, default=0.0)
     
     update = relationship("UpdateRecord", back_populates="papers")
     chat_messages = relationship("ChatMessage", back_populates="paper")
@@ -62,6 +63,8 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE papers ADD COLUMN source_id TEXT"))
                 if 'bookmarked' not in columns:
                     conn.execute(text("ALTER TABLE papers ADD COLUMN bookmarked BOOLEAN DEFAULT 0"))
+                if 'relevance_score' not in columns:
+                    conn.execute(text("ALTER TABLE papers ADD COLUMN relevance_score REAL DEFAULT 0.0"))
                 conn.commit()
             
             # Check updates table

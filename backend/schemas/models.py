@@ -20,6 +20,7 @@ class Paper(BaseModel):
     category: str  # e.g., 'AI/ML', 'Bioinformatics'
     insights: Optional[PaperInsight] = None
     figure_urls: List[str] = Field(default_factory=list)
+    relevance_score: float = 0.0
 
 class DailyUpdate(BaseModel):
     date: datetime
