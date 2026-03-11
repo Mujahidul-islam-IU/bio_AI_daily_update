@@ -4,6 +4,26 @@ from datetime import datetime, timedelta
 from typing import List
 from schemas.models import Paper
 
+def compute_relevance(title: str, abstract: str, query: str) -> float:
+    combined = (title + " " + abstract).lower()
+    query_words = query.lower().split()
+    if not query_words or not combined:
+        return 0.0
+    
+    occurrences = sum(combined.count(qw) for qw in query_words)
+    words = combined.split()
+    density = occurrences / max(len(words), 1)
+    
+    phrase_bonus = 2.0 if query.lower() in combined else 0.0
+    score = min((density * 1000), 60.0) + (phrase_bonus * 20.0)
+    
+    if query.lower() in title.lower():
+        score += 20.0
+        
+    final_score = min(max(round(score + 65.0, 1), 60.0), 99.9)
+    return final_score
+
+
 class PaperFetcher:
     def __init__(self):
         self.arxiv_url = "http://export.arxiv.org/api/query"
@@ -48,7 +68,8 @@ class PaperFetcher:
                         abstract=abstract,
                         url=url,
                         source="arXiv",
-                        category="AI/ML"
+                        category="AI/ML",
+                        relevance_score=compute_relevance(title, abstract, query)
                     )
                     
                     # Strict word match filtering to guarantee relevance
@@ -131,7 +152,8 @@ class PaperFetcher:
                         abstract=abstract,
                         url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
                         source="PubMed",
-                        category="Bioinformatics"
+                        category="Bioinformatics",
+                        relevance_score=compute_relevance(title, abstract, query)
                     )
                     
                     # Strict word match filtering
@@ -187,7 +209,8 @@ class PaperFetcher:
                         abstract=item.get("abstract", "Abstract not available."),
                         url=f"https://doi.org/{doi}" if doi else "#",
                         source="bioRxiv",
-                        category="Preprint"
+                        category="Preprint",
+                        relevance_score=compute_relevance(item.get("title", "No Title"), item.get("abstract", "Abstract not available."), query)
                     ))
                 except Exception as e:
                     pass
@@ -196,46 +219,61 @@ class PaperFetcher:
             return []
 
     def fetch_springer_papers(self, query: str, max_results: int = 5) -> List[Paper]:
-        """Fetch reputable peer-reviewed papers from Semantic Scholar (representing Springer Nature & Top Journals)."""
+        """Fetch reputable peer-reviewed papers from Crossref (representing Top Journals)."""
         try:
-            semantic_url = "https://api.semanticscholar.org/graph/v1/paper/search"
-            sem_params = {
+            crossref_url = "https://api.crossref.org/works"
+            
+            crossref_params = {
                 "query": query,
-                "limit": max_results * 5, # Fetch more to filter for high relevance and recent dates
-                "fields": "paperId,title,abstract,authors,year,publicationDate,url,venue",
-                "year": f"{datetime.now().year-3}-{datetime.now().year}" # Filter out old papers
+                "filter": "has-abstract:true,type:journal-article",
+                "select": "DOI,title,abstract,author,issued,container-title,URL",
+                "rows": max_results * 8
             }
             
-            # Using Semantic Scholar as it's 100% free and contains Nature, Science, Cell, etc.
-            response = requests.get(semantic_url, params=sem_params, timeout=12)
-            if response.status_code != 200: return []
+            headers = {"User-Agent": "BioAIDailyUpdate/1.0 (mailto:test@example.com)"}
+            response = requests.get(crossref_url, params=crossref_params, headers=headers, timeout=12)
+            if response.status_code != 200: 
+                return []
             
             data = response.json()
             papers = []
             
-            for item in data.get("data", []):
+            for item in data.get("message", {}).get("items", []):
                 try:
-                    pid = item.get("paperId", "")
-                    title = item.get("title", "No Title")
-                    abstract = item.get("abstract") or "Abstract not available."
+                    title_list = item.get("title", [])
+                    title = title_list[0] if title_list else "No Title"
                     
-                    year = item.get("year")
-                    pub_date_str = item.get("publicationDate")
-                    
-                    if pub_date_str:
-                        # Format is YYYY-MM-DD
-                        pdate = datetime.strptime(pub_date_str, "%Y-%m-%d")
-                    elif year:
-                        pdate = datetime(year, 1, 1)
+                    abstract = item.get("abstract", "")
+                    if abstract:
+                        import re
+                        abstract = re.sub(r'<[^>]+>', '', abstract).strip()
                     else:
+                        abstract = "Abstract not available."
+                        
+                    issued = item.get("issued", {}).get("date-parts", [[datetime.now().year]])[0]
+                    year = issued[0] if len(issued) > 0 else datetime.now().year
+                    month = issued[1] if len(issued) > 1 else 1
+                    day = issued[2] if len(issued) > 2 else 1
+                    
+                    # Skip papers older than 3 years
+                    if year < datetime.now().year - 3:
+                        continue
+                        
+                    try:
+                        pdate = datetime(year, month, day)
+                    except:
                         pdate = datetime.now()
                         
-                    url = item.get("url") or f"https://www.semanticscholar.org/paper/{pid}"
-                    venue = item.get("venue", "Reputed Journal")
+                    doi = item.get("DOI", "")
+                    url = item.get("URL", f"https://doi.org/{doi}")
+                    
+                    venue_list = item.get("container-title", [])
+                    venue = venue_list[0] if venue_list else "Reputed Journal"
                     
                     authors = []
-                    for a in item.get("authors", [])[:3]:
-                        authors.append(a.get("name", ""))
+                    for a in item.get("author", [])[:3]:
+                        name = f"{a.get('given', '')} {a.get('family', '')}".strip()
+                        if name: authors.append(name)
                     if not authors: authors = ["Unknown"]
                     
                     # Ensure abstract has length and strictly matches query logic
@@ -244,22 +282,23 @@ class PaperFetcher:
                     
                     if abstract and len(abstract) > 50 and all(w in combined_text for w in query_words):
                         papers.append(Paper(
-                            source_id=pid,
+                            source_id=doi if doi else url,
                             title=title,
                             authors=authors,
                             published_date=pdate,
                             abstract=abstract,
                             url=url,
-                            source=venue if venue else "Semantic Scholar",
-                            category="Nature / Top Journals"
+                            source=venue,
+                            category="Nature / Top Journals",
+                            relevance_score=compute_relevance(title, abstract, query)
                         ))
                     
                     if len(papers) >= max_results:
                         break
                 except Exception as e:
-                    print(f"Skipping Semantic Scholar entry: {e}")
+                    print(f"Skipping Crossref entry: {e}")
             
             return papers
         except Exception as e:
-            print(f"Semantic Scholar fetch error: {e}")
+            print(f"Crossref fetch error: {e}")
             return []
