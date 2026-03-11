@@ -40,7 +40,7 @@ class PaperFetcher:
                     url = url_elem.attrib['href'] if url_elem is not None else paper_id
                     authors = [author.find('atom:name', ns).text for author in entry.findall('atom:author', ns)]
                     
-                    papers.append(Paper(
+                    paper_obj = Paper(
                         source_id=paper_id,
                         title=title,
                         authors=authors,
@@ -49,7 +49,16 @@ class PaperFetcher:
                         url=url,
                         source="arXiv",
                         category="AI/ML"
-                    ))
+                    )
+                    
+                    # Strict word match filtering to guarantee relevance
+                    combined_text = (title + " " + abstract).lower()
+                    query_words = query.lower().split()
+                    if all(word in combined_text for word in query_words):
+                        papers.append(paper_obj)
+                        
+                    if len(papers) >= max_results:
+                        break
                 except Exception as e:
                     pass
             return papers
@@ -58,9 +67,10 @@ class PaperFetcher:
 
     def fetch_pubmed_papers(self, query: str, max_results: int = 5) -> List[Paper]:
         try:
-            # Append [Title/Abstract] to ensure relevance instead of random keyword matching
-            strict_query = f"{query}[Title/Abstract]"
-            search_params = {"db": "pubmed", "term": strict_query, "retmode": "json", "retmax": max_results, "sort": "relevance"}
+            # Query recent papers and sort by date for freshness
+            recent_years = f'"{datetime.now().year-2}"[Date - Publication] : "3000"[Date - Publication]'
+            strict_query = f"({query}[Title/Abstract]) AND ({recent_years})"
+            search_params = {"db": "pubmed", "term": strict_query, "retmode": "json", "retmax": max_results * 4, "sort": "pub+date"}
             response = requests.get(self.pubmed_search_url, params=search_params)
             if response.status_code != 200: return []
             
@@ -113,7 +123,7 @@ class PaperFetcher:
                     except:
                         pdate = datetime.now()
                     
-                    papers.append(Paper(
+                    paper_obj = Paper(
                         source_id=pmid,
                         title=title,
                         authors=authors,
@@ -122,7 +132,16 @@ class PaperFetcher:
                         url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
                         source="PubMed",
                         category="Bioinformatics"
-                    ))
+                    )
+                    
+                    # Strict word match filtering
+                    combined_text = (title + " " + abstract).lower()
+                    query_words = query.lower().split()
+                    if all(word in combined_text for word in query_words):
+                        papers.append(paper_obj)
+                        
+                    if len(papers) >= max_results:
+                        break
                 except Exception as e:
                     pass
             return papers
@@ -177,22 +196,14 @@ class PaperFetcher:
             return []
 
     def fetch_springer_papers(self, query: str, max_results: int = 5) -> List[Paper]:
-        """Fetch reputable peer-reviewed papers from Springer Nature Open Access API."""
+        """Fetch reputable peer-reviewed papers from Semantic Scholar (representing Springer Nature & Top Journals)."""
         try:
-            # Springer Nature Meta API (Public, no key needed for basic OA access)
-            # Documentation: https://dev.springernature.com/adding-constraints
-            springer_api = "http://api.springernature.com/meta/v2/json"
-            params = {
-                "q": f"keyword:{query} openaccess:true",
-                "p": max_results
-            }
-            # We don't have an API key, so we use their public free tier endpoint if available
-            # Note: We can also fallback to Semantic Scholar if Springer requires auth
             semantic_url = "https://api.semanticscholar.org/graph/v1/paper/search"
             sem_params = {
                 "query": query,
-                "limit": max_results,
-                "fields": "paperId,title,abstract,authors,year,url,venue"
+                "limit": max_results * 5, # Fetch more to filter for high relevance and recent dates
+                "fields": "paperId,title,abstract,authors,year,publicationDate,url,venue",
+                "year": f"{datetime.now().year-3}-{datetime.now().year}" # Filter out old papers
             }
             
             # Using Semantic Scholar as it's 100% free and contains Nature, Science, Cell, etc.
@@ -207,8 +218,18 @@ class PaperFetcher:
                     pid = item.get("paperId", "")
                     title = item.get("title", "No Title")
                     abstract = item.get("abstract") or "Abstract not available."
+                    
                     year = item.get("year")
-                    pdate = datetime(year, 1, 1) if year else datetime.now()
+                    pub_date_str = item.get("publicationDate")
+                    
+                    if pub_date_str:
+                        # Format is YYYY-MM-DD
+                        pdate = datetime.strptime(pub_date_str, "%Y-%m-%d")
+                    elif year:
+                        pdate = datetime(year, 1, 1)
+                    else:
+                        pdate = datetime.now()
+                        
                     url = item.get("url") or f"https://www.semanticscholar.org/paper/{pid}"
                     venue = item.get("venue", "Reputed Journal")
                     
@@ -217,8 +238,11 @@ class PaperFetcher:
                         authors.append(a.get("name", ""))
                     if not authors: authors = ["Unknown"]
                     
-                    # Ensure abstract has some length
-                    if abstract and len(abstract) > 50:
+                    # Ensure abstract has length and strictly matches query logic
+                    combined_text = (title + " " + abstract).lower()
+                    query_words = query.lower().split()
+                    
+                    if abstract and len(abstract) > 50 and all(w in combined_text for w in query_words):
                         papers.append(Paper(
                             source_id=pid,
                             title=title,
@@ -229,6 +253,9 @@ class PaperFetcher:
                             source=venue if venue else "Semantic Scholar",
                             category="Nature / Top Journals"
                         ))
+                    
+                    if len(papers) >= max_results:
+                        break
                 except Exception as e:
                     print(f"Skipping Semantic Scholar entry: {e}")
             
