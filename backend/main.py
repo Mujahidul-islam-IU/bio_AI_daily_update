@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -6,11 +6,13 @@ from typing import List, Optional
 import os
 import json
 from datetime import datetime
+from dotenv import load_dotenv
 
 from schemas.models import DailyUpdate, Paper
 from services.paper_service import PaperFetcher
 from services.llm_service import LLMService
 from database import SessionLocal, UpdateRecord, PaperRecord, ChatMessage
+from sqlalchemy.orm import Session
 
 app = FastAPI(title="BioAI Daily Update API")
 
@@ -24,7 +26,9 @@ app.add_middleware(
 )
 
 # API Keys
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "YOUR_GROQ_API_KEY_HERE")
+load_dotenv() # Loads keys from backend/.env file
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY") 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -34,6 +38,13 @@ fetcher = PaperFetcher()
 # In-memory storage
 latest_update = None
 web_research_cache = {}
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/")
 async def root():
@@ -116,6 +127,7 @@ async def trigger_research(
     bio_topic: str = Query(..., description="Query for Bioinformatics papers"),
     db: Session = Depends(get_db)
 ):
+    global latest_update
     try:
         fetcher = PaperFetcher()
         # 1. Fetch from arXiv, PubMed, bioRxiv, and Semantic Scholar (Nature/Top Journals)
@@ -165,6 +177,7 @@ async def trigger_research(
             nature_papers=nature_papers,
             overall_gap_analysis=gap_analysis
         )
+        latest_update = update_data
         return update_data
     except Exception as e:
         print(f"Research trigger error: {e}")

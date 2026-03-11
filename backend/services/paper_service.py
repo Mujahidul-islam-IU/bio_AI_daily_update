@@ -15,10 +15,10 @@ class PaperFetcher:
 
     def fetch_arxiv_papers(self, query: str, max_results: int = 5) -> List[Paper]:
         params = {
-            "search_query": query,
+            "search_query": f'all:"{query}"',
             "start": 0,
             "max_results": max_results,
-            "sortBy": "submittedDate",
+            "sortBy": "relevance",
             "sortOrder": "descending"
         }
         try:
@@ -58,7 +58,9 @@ class PaperFetcher:
 
     def fetch_pubmed_papers(self, query: str, max_results: int = 5) -> List[Paper]:
         try:
-            search_params = {"db": "pubmed", "term": query, "retmode": "json", "retmax": max_results, "sort": "pub+date"}
+            # Append [Title/Abstract] to ensure relevance instead of random keyword matching
+            strict_query = f"{query}[Title/Abstract]"
+            search_params = {"db": "pubmed", "term": strict_query, "retmode": "json", "retmax": max_results, "sort": "relevance"}
             response = requests.get(self.pubmed_search_url, params=search_params)
             if response.status_code != 200: return []
             
@@ -143,14 +145,10 @@ class PaperFetcher:
             
             for item in collection:
                 combined = (item.get("title", "") + " " + item.get("abstract", "")).lower()
-                if any(term in combined for term in query_terms):
+                # Require all terms to be present for high relevance
+                if all(term in combined for term in query_terms):
                     filtered.append(item)
                 if len(filtered) >= max_results: break
-            
-            if len(filtered) < max_results:
-                for item in collection:
-                    if item not in filtered: filtered.append(item)
-                    if len(filtered) >= max_results: break
             
             papers = []
             for item in filtered[:max_results]:

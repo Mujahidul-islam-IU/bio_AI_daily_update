@@ -19,8 +19,8 @@ class LLMService:
         else:
             self.gemini_model = None
             
-        # Use a model with higher rate limits for better stability
-        self.model = "llama-3.1-8b-instant" 
+        # Using the best available free model on Groq
+        self.model = "llama-3.3-70b-versatile" 
 
     async def _call_with_fallback(self, prompt: str, system_prompt: str = "You are a specialized AI assistant in Bioinformatics and AI research.", force_json: bool = False):
         """Internal helper to call Groq with a Gemini fallback on 429/failure."""
